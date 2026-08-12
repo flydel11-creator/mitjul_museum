@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>밑줄 후원 박물관</title>
+<!--
+  도네 리액션 박물관 — 아카이버가 뽑은 manifest.json 을 읽는 정적 전시관.
+  전시품(클립)은 clips/<tier>/ 아래. 서버는 이 폴더를 통째로 서빙하면 된다.
+  (아카이버 미리보기 /museum 과 Cloudflare Pages 배포가 같은 파일을 쓴다)
+-->
+<style>
+  :root {
+    --wall: #1a1714;          /* 어두운 전시장 벽 */
+    --wall-2: #221e1a;
+    --frame: #8a6d3b;         /* 액자 금테 */
+    --frame-hi: #c9a86a;
+    --text: #e8e0d2;
+    --dim: #9a8f7d;
+    --plate: #2e2822;         /* 명패 */
+    --accent-50: #7ab87a;     /* 5만원관 표지색 */
+    --accent-100: #c9a86a;    /* 10만원관 표지색 */
+    --special: #d4696a;       /* 특별전시 */
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--wall); color: var(--text);
+    font-family: "Pretendard", -apple-system, "Malgun Gothic", serif;
+    line-height: 1.6;
+  }
+  header {
+    text-align: center; padding: 46px 16px 30px;
+    background: linear-gradient(var(--wall-2), var(--wall));
+    border-bottom: 1px solid #3a332b;
+  }
+  header .deco { color: var(--frame-hi); letter-spacing: 8px; font-size: 12px; }
+  h1 { margin: 10px 0 6px; font-size: 26px; letter-spacing: 2px; font-weight: 700; }
+  header p { margin: 0; color: var(--dim); font-size: 13px; }
+
+  nav {
+    display: flex; justify-content: center; gap: 10px; flex-wrap: wrap;
+    padding: 18px 12px; position: sticky; top: 0; z-index: 5;
+    background: rgba(26,23,20,.92); backdrop-filter: blur(6px);
+    border-bottom: 1px solid #3a332b;
+  }
+  nav button {
+    background: none; border: 1px solid #4a4238; color: var(--dim);
+    padding: 9px 20px; border-radius: 999px; cursor: pointer; font-size: 14px;
+  }
+  nav button.on { color: var(--text); border-color: var(--frame-hi);
+                  background: rgba(201,168,106,.12); }
+
+  .hall { max-width: 1080px; margin: 0 auto; padding: 26px 14px 80px; }
+  .hall-title { text-align: center; margin: 26px 0 4px; font-size: 19px;
+                letter-spacing: 3px; }
+  .hall-sub { text-align: center; color: var(--dim); font-size: 12px;
+              margin-bottom: 26px; }
+
+  /* 액자 높이가 제각각이라(세로 클립) 줄을 맞추지 않고 위로 붙인다.
+     안 그러면 가로 액자가 세로 액자 높이만큼 늘어난 칸 가운데에 뜬다. */
+  .grid { display: grid; gap: 26px; align-items: start;
+          grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); }
+
+  /* 전시품: 액자 + 명패 */
+  .art { cursor: pointer; }
+  .art .framebox {
+    border: 10px solid var(--frame);
+    outline: 1px solid #5d4a28; outline-offset: -12px;
+    border-radius: 3px; background: #000;
+    box-shadow: 0 12px 28px rgba(0,0,0,.55);
+    /* 기본 16:9. 영상 모양에 맞춰 액자마다 style 로 덮어쓴다(세로 클립) */
+    aspect-ratio: 16/9; position: relative; overflow: hidden;
+    transition: transform .18s ease, box-shadow .18s ease;
+  }
+  .art:hover .framebox { transform: translateY(-4px);
+                         box-shadow: 0 18px 36px rgba(0,0,0,.65); }
+  .art video.thumb { width: 100%; height: 100%; object-fit: cover;
+                     display: block; pointer-events: none; }
+  .art .play {
+    position: absolute; inset: 0; display: flex; align-items: center;
+    justify-content: center; font-size: 44px; color: rgba(255,255,255,.85);
+    text-shadow: 0 2px 10px rgba(0,0,0,.8);
+  }
+  /* 치지직 클립으로 거는 소장품 — 어디서 온 영상인지 액자에 밝혀 둔다 */
+  .art .src-badge {
+    position: absolute; left: 8px; bottom: 8px; padding: 2px 7px;
+    border-radius: 999px; font-size: 10px; font-weight: 700; letter-spacing: .3px;
+    background: rgba(0, 255, 163, .16); color: #00ffa3;
+    border: 1px solid rgba(0, 255, 163, .35);
+  }
+  .plate {
+    margin: 12px auto 0; width: 88%; background: var(--plate);
+    border: 1px solid #4a4238; border-radius: 4px; padding: 9px 13px;
+    font-size: 13px; text-align: center;
+  }
+  /* 작품명 — 붙여 둔 전시품만. 명패의 첫 줄이 된다. */
+  .plate .works { font-weight: 700; font-size: 14px; margin-bottom: 4px;
+    line-height: 1.35; }
+  .plate .works + .donor { font-weight: 600; font-size: 12px; color: var(--dim); }
+  .plate .donor { font-weight: 700; letter-spacing: .5px; }
+  .plate .meta { color: var(--dim); font-size: 11px; margin-top: 3px; }
+  .plate .badge-x { color: var(--special); font-weight: 700; }
+
+  /* 관람(라이트박스) */
+  .view {
+    position: fixed; inset: 0; background: rgba(0,0,0,.9); z-index: 50;
+    display: none; align-items: center; justify-content: center;
+    flex-direction: column; padding: 18px;
+  }
+  .view.on { display: flex; }
+  .view video { max-width: min(96vw, 980px); max-height: 72vh;
+                border: 10px solid var(--frame); border-radius: 3px;
+                background: #000; }
+  .view .plate { width: auto; min-width: 260px; max-width: 90vw; }
+  .view .close { position: absolute; top: 14px; right: 18px; font-size: 30px;
+                 background: none; border: 0; color: var(--text); cursor: pointer; }
+
+  footer { text-align: center; color: var(--dim); font-size: 11px;
+           padding: 30px 12px 40px; border-top: 1px solid #3a332b; }
+  .empty { text-align: center; color: var(--dim); padding: 60px 0; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="deco">━━━ ✦ ━━━</div>
+  <h1>밑줄 후원 박물관</h1>
+  <p>후원의 순간들을 영구 소장합니다 · MUSEUM OF DONATIONS</p>
+</header>
+
+<!-- 전시관 단추는 소장품을 읽고 나서 만든다(비어 있는 관은 열지 않는다) -->
+<nav id="nav"></nav>
+
+<main class="hall" id="hall"><div class="empty">개관 준비 중…</div></main>
+
+<div class="view" id="view">
+  <button class="close" title="닫기">×</button>
+  <video controls playsinline></video>
+  <iframe style="display:none; width:min(96vw,980px); aspect-ratio:16/9;
+                 border:10px solid var(--frame); border-radius:3px; background:#000"
+          allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen></iframe>
+  <div class="plate" id="view-plate"></div>
+</div>
+
+<footer>
+  본 전시관의 모든 소장품은 밑줄 님의 방송에서 수집되었습니다.<br>
+  팬 제작 비영리 아카이브 · 문제 시 즉시 철거합니다.
+</footer>
+
+<script>
+let exhibits = [];
+let hall = "all";
+
+// 전시관은 **금액**으로 가른다(tier 가 아니라). tier 는 파일을 어느 폴더에 둘지
+// 정할 뿐이라, 5만원을 연속으로 쏜 10만원짜리가 tier 로는 "50k" 로 남는다.
+//
+// 관은 **스트리머의 리액션 단위**(5만·10만·15만·30만)를 그대로 따른다 — 금액이
+// 곧 리액션 종류라서, 같은 관에 모으면 같은 리액션이 모인다. 단위에 딱 안 맞는
+// 금액(연속 후원 합산 20만, 76,950원 같은 것)은 전관·특별전시에서 본다.
+// 전시관은 아카이버 [박물관 관리] 에서 정한다(이름·금액·순서). manifest 가
+// 그 목록을 싣고 오고, 전시품마다 `hall` 에 어느 관인지가 적혀 있다.
+//  - mode "exact": 딱 그 금액. 전시품의 `hall` 이 곧 이 관이다.
+//  - mode "min"  : 그 금액 이상을 걸쳐 보여주는 관(특별전시 같은 것).
+let halls = [];
+const hallById = (id) => halls.find(h => h.id === id);
+// ★ 화면은 **배정된 관만** 본다(2026-08-12 사용자 지시 — "값 제한은 빼고
+// 관 배정만"). 금액은 후원 클립을 어느 관으로 **자동 배정할지** 정할 때만 쓰이고
+// (아카이버가 `hall` 에 미리 적어 준다), 여기서 다시 금액을 따지지 않는다.
+// 그러지 않으면 금액이 0인 치지직 클립이 걸어 둔 관에서 사라진다.
+const inHall = (e, id) => id === "all" || e.hall === id;
+
+// 관 단추는 **비어 있어도 그대로 둔다**(사용자 지시). 한때 빈 관을 감췄더니
+// 아직 아무것도 안 건 관이 통째로 사라져, 이름을 잘못 넣은 줄로 보였다.
+function buildNav() {
+  const rooms = [["all", "전관"], ...halls.map(h => [h.id, h.name])];
+  if (!rooms.some(([id]) => id === hall)) hall = "all";
+  document.getElementById("nav").innerHTML = rooms.map(([h, label]) =>
+    `<button data-hall="${h}"${h === hall ? ' class="on"' : ""}>${label}</button>`).join("");
+  document.querySelectorAll("#nav button").forEach(b => b.onclick = () => {
+    document.querySelectorAll("#nav button").forEach(x => x.classList.remove("on"));
+    b.classList.add("on");
+    hall = b.dataset.hall;
+    render();
+  });
+}
+
+// 전시 조건: **유튜브나 치지직에 걸린 것만.** 로컬 파일은 박물관에 내보내지
+// 않는다(사용자 요청) — 사이트를 밖에 올리면 그 파일은 따라가지도 않고,
+// 미리보기에서만 되는 것을 전시라고 부를 수도 없다.
+const isOnAir = (e) => e.show !== false && !!(e.youtube || e.chzzk);
+
+// 액자는 영상 모양을 따른다 — 치지직 클립엔 세로(9:16)가 흔하다.
+// 비율은 아카이버가 썸네일에서 재어 manifest 에 적어 준다. 모르면 16:9
+// (유튜브에 올리는 것은 방송 화면을 자른 것이라 가로다).
+const aspectOf = (e) => e.aspect || "16/9";
+
+// 액자에 걸 그림 — 유튜브 아니면 치지직 썸네일.
+// (치지직 썸네일 주소는 아카이버가 API 로 받아 manifest 에 넣어 준다. 정적
+//  사이트에서는 치지직 API 를 직접 부를 수 없다.)
+function thumbHTML(e) {
+  const img = e.youtube ? `https://i.ytimg.com/vi/${e.youtube}/hqdefault.jpg`
+    : e.chzzk_thumb || "";
+  return `<img class="thumb" loading="lazy"
+    style="width:100%;height:100%;object-fit:cover" src="${img}" alt="">`;
+}
+
+// 명패에 **금액은 적지 않는다**(2026-08-12 사용자 지시) — 관 이름이 곧 금액이라
+// 팬들은 이미 안다. 손으로 올린 클립은 금액 자체가 없어 "0원"으로 나오기도 했다.
+// 방송 제목도 없을 수 있다(치지직 클립은 어느 방송인지 모른다).
+function plateHTML(e) {
+  const meta = [e.date, e.title ? `「${e.title}」` : ""].filter(Boolean).join(" · ");
+  return `
+    ${e.display_title ? `<div class="works">${e.display_title}</div>` : ""}
+    <div class="donor">${e.donor}</div>
+    ${e.count > 1 ? `<div><span class="badge-x">연속 ${e.count}회</span></div>` : ""}
+    ${meta ? `<div class="meta">${meta}</div>` : ""}`;
+}
+
+function render() {
+  const box = document.getElementById("hall");
+  // 전시는 **검수에서 채택한 것만**(manifest 의 show). 아직 안 본 것·제외한 것은
+  // 목록엔 남아 있지만 관람객에게는 안 보인다.
+  // (이름 주의: `open` 은 아래 관람 함수라 가리면 액자 클릭이 죽는다)
+  const onShow = exhibits.filter(isOnAir);
+  let list = hall === "all" ? onShow : onShow.filter(e => inHall(e, hall));
+  // 큰 금액부터, 같으면 최근 것부터 — 박물관은 대표 소장품이 입구에 온다.
+  // (괄호 주의: `x || y ? 1 : -1` 은 삼항이 뒤에 걸려 늘 1/-1 만 나온다)
+  list = [...list].sort((a, b) =>
+    b.amount - a.amount || (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));
+
+  const room = hallById(hall);
+  const title = hall === "all" ? "전관" : (room?.name || "전관");
+  // 관 이름 아래에도 금액은 안 적는다(사용자 지시).
+  const note = "";
+  box.innerHTML = `
+    <div class="hall-title">${title}</div>
+    <div class="hall-sub">소장품 ${list.length}점${note ? ` · ${note}` : ""}</div>
+    <div class="grid">${list.map((e, i) => `
+      <div class="art" data-i="${exhibits.indexOf(e)}">
+        <div class="framebox" style="aspect-ratio:${aspectOf(e)}">
+          ${thumbHTML(e)}
+          <div class="play">▶</div>
+          ${!e.youtube && e.chzzk ? `<div class="src-badge">치지직 클립</div>` : ""}
+        </div>
+        <div class="plate">${plateHTML(e)}</div>
+      </div>`).join("") || `<div class="empty">이 전시관은 아직 준비 중입니다.</div>`}
+    </div>`;
+
+  box.querySelectorAll(".art").forEach(a => a.onclick = () => open(Number(a.dataset.i)));
+}
+
+const view = document.getElementById("view");
+const vv = view.querySelector("video");
+const fr = view.querySelector("iframe");
+function open(i) {
+  const e = exhibits[i];
+  // 밖에 올라간 소장품은 임베드로 관람한다(영상 트래픽이 그쪽으로 간다).
+  // 유튜브와 치지직 클립을 병행한다 — 둘 다 있으면 유튜브(내 계정)가 이긴다.
+  // 로컬 파일로 재생하는 길은 두지 않는다 — 걸린 것만 관람한다(사용자 요청).
+  const embed = e.youtube
+    ? `https://www.youtube-nocookie.com/embed/${e.youtube}?autoplay=1&rel=0`
+    : e.chzzk ? `https://chzzk.naver.com/embed/clip/${e.chzzk}?autoplay=1` : null;
+  if (!embed) return;
+  vv.style.display = "none";
+  fr.style.display = "";
+  // 관람 창도 영상 모양을 따른다. 세로 영상은 높이가 화면을 넘지 않게 잡는다.
+  const ratio = aspectOf(e);
+  const [w, h] = ratio.split("/").map(Number);
+  fr.style.aspectRatio = ratio;
+  fr.style.width = h > w ? "min(92vw, calc(78vh * " + (w / h) + "))"
+                         : "min(96vw, 980px)";
+  fr.src = embed;
+  document.getElementById("view-plate").innerHTML = plateHTML(e);
+  view.classList.add("on");
+}
+function close() {
+  view.classList.remove("on");
+  vv.pause(); vv.removeAttribute("src");
+  fr.removeAttribute("src");
+}
+view.querySelector(".close").onclick = close;
+view.onclick = ev => { if (ev.target === view) close(); };
+document.addEventListener("keydown", ev => { if (ev.key === "Escape") close(); });
+
+fetch("manifest.json").then(r => r.json()).then(d => {
+  exhibits = d.exhibits || [];
+  halls = d.halls || [];
+  buildNav();      // 관 목록은 소장품에 따라 달라진다
+  render();
+}).catch(() => {
+  document.getElementById("hall").innerHTML =
+    `<div class="empty">소장품 목록(manifest.json)을 읽지 못했습니다.</div>`;
+});
+</script>
+</body>
+</html>
