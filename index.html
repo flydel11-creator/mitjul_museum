@@ -284,7 +284,6 @@
     <input type="text" id="gate-input" placeholder="답을 적어 주세요"
            autocomplete="off" autocapitalize="off" spellcheck="false">
     <button id="gate-go">입장하기</button>
-    <p class="fine" id="gate-hint"></p>
   </div>
 
   <!-- '소몽이' 라고 답한 사람에게 -->
@@ -463,9 +462,10 @@ const remember = (k) => { try { localStorage.setItem(k, "1"); } catch (_) {} };
 const recalls = (k) => { try { return localStorage.getItem(k) === "1"; } catch (_) { return false; } };
 
 // 답 비교용: 공백·문장부호를 털어내고 본다("돈통단!", "돈 통단" 도 통과).
+// 정답이 아니면 전부 같은 화면으로 보낸다 — 틀린 답마다 다른 반응을 주면
+// 답을 좁혀 나갈 실마리가 된다.
 const plain = (s) => (s || "").replace(/[^0-9a-z가-힣]/gi, "").toLowerCase();
 const PASS = ["돈통", "돈통단", "돈통단들", "돈통들"];
-const NOPE = ["소몽이", "소몽", "소몽이들", "소몽이단"];
 
 function showNotice() {
   if (recalls(NOTICE_KEY)) return;
@@ -484,26 +484,23 @@ function showNotice() {
   const ask = document.getElementById("gate-ask");
   const nope = document.getElementById("gate-nope");
   const input = document.getElementById("gate-input");
-  const hint = document.getElementById("gate-hint");
   gate.hidden = false;
   input.focus();
 
   const submit = () => {
+    // 빈칸 판정은 **적은 그대로** 로 본다. plain() 을 거친 값으로 보면
+    // 자모만 친 경우("ㅁㄴㅇㄹ")가 빈 문자열이 돼 아무 반응도 없다
+    // (가-힣 에 자모는 안 들어간다).
+    if (!input.value.trim()) return;
     const answer = plain(input.value);
-    if (!answer) return;
     if (PASS.includes(answer)) {
       remember(GATE_KEY);
       gate.hidden = true;
       showNotice();
       return;
     }
-    if (NOPE.includes(answer)) {      // 아는 척했지만 한 끗 모자란 사람
-      ask.hidden = true;
-      nope.hidden = false;
-      return;
-    }
-    hint.textContent = "아닌데요. 방송을 더 보고 오세요.";
-    input.select();
+    ask.hidden = true;                // 정답이 아니면 전부 여기로
+    nope.hidden = false;
   };
 
   document.getElementById("gate-go").onclick = submit;
@@ -511,7 +508,6 @@ function showNotice() {
   document.getElementById("gate-retry").onclick = () => {
     nope.hidden = true;
     ask.hidden = false;
-    hint.textContent = "";
     input.value = "";
     input.focus();
   };
