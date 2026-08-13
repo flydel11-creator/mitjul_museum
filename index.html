@@ -3,24 +3,28 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>밑줄 후원 박물관</title>
+<title>어둠의 밑줄 박물관</title>
 <!--
   도네 리액션 박물관 — 아카이버가 뽑은 manifest.json 을 읽는 정적 전시관.
   전시품(클립)은 clips/<tier>/ 아래. 서버는 이 폴더를 통째로 서빙하면 된다.
   (아카이버 미리보기 /museum 과 Cloudflare Pages 배포가 같은 파일을 쓴다)
 -->
 <style>
+  /* ── 어둠의 박물관 ──────────────────────────────────────────────
+     촛불 켠 지하 전시관. 그림은 한 장도 안 쓴다 — 배경도 촛불도 전부 CSS 라
+     사이트가 여전히 파일 두 개(index.html + manifest.json)로 끝난다. */
   :root {
-    --wall: #1a1714;          /* 어두운 전시장 벽 */
-    --wall-2: #221e1a;
-    --frame: #8a6d3b;         /* 액자 금테 */
+    --wall: #0b0908;          /* 거의 빛이 없는 벽 */
+    --wall-2: #12100d;
+    --frame: #6b5227;         /* 촛불에 삭은 금테 */
     --frame-hi: #c9a86a;
-    --text: #e8e0d2;
-    --dim: #9a8f7d;
-    --plate: #2e2822;         /* 명패 */
-    --accent-50: #7ab87a;     /* 5만원관 표지색 */
-    --accent-100: #c9a86a;    /* 10만원관 표지색 */
-    --special: #d4696a;       /* 특별전시 */
+    --text: #e4d9c6;
+    --dim: #8b7f6c;
+    --plate: #1d1915;         /* 명패 */
+    --accent-50: #7ab87a;
+    --accent-100: #c9a86a;
+    --special: #d4696a;
+    --candle: 255, 176, 74;   /* 불빛 색(투명도만 바꿔 쓴다) */
   }
   * { box-sizing: border-box; }
   body {
@@ -28,31 +32,97 @@
     font-family: "Pretendard", -apple-system, "Malgun Gothic", serif;
     line-height: 1.6;
   }
-  header {
-    text-align: center; padding: 46px 16px 30px;
-    background: linear-gradient(var(--wall-2), var(--wall));
-    border-bottom: 1px solid #3a332b;
+  /* 사방이 어둡고 가운데만 은은한 — 촛불 몇 자루가 만든 빛웅덩이 */
+  body::before {
+    content: ""; position: fixed; inset: 0; z-index: 0; pointer-events: none;
+    background:
+      radial-gradient(60vw 40vh at 8% 92%, rgba(var(--candle), .10), transparent 70%),
+      radial-gradient(60vw 40vh at 92% 92%, rgba(var(--candle), .10), transparent 70%),
+      radial-gradient(70vw 50vh at 50% 0%, rgba(var(--candle), .07), transparent 70%),
+      radial-gradient(120vw 120vh at 50% 45%, transparent 35%, rgba(0,0,0,.72) 100%);
+    animation: breathe 7s ease-in-out infinite;
   }
-  header .deco { color: var(--frame-hi); letter-spacing: 8px; font-size: 12px; }
-  h1 { margin: 10px 0 6px; font-size: 26px; letter-spacing: 2px; font-weight: 700; }
-  header p { margin: 0; color: var(--dim); font-size: 13px; }
+  @keyframes breathe { 0%,100% { opacity: .92 } 50% { opacity: 1 } }
+  body > * { position: relative; z-index: 1; }
+
+  /* 촛대 — 화면 네 귀퉁이에 세워 둔다(내용 뒤, 클릭 안 됨) */
+  .ambience { position: fixed; inset: 0; z-index: 0; pointer-events: none; }
+  body > .ambience { z-index: 0; }
+  .candle { position: absolute; width: 16px; }
+  .candle .stick {
+    display: block; width: 16px; border-radius: 3px 3px 1px 1px;
+    background: linear-gradient(180deg, #d9cbb2, #8d8271 55%, #5a5245);
+    box-shadow: 0 0 14px rgba(var(--candle), .18);
+  }
+  .candle .wick {
+    position: absolute; left: 50%; top: -5px; width: 2px; height: 6px;
+    margin-left: -1px; background: #3a2f24;
+  }
+  .candle .flame {
+    position: absolute; left: 50%; top: -22px; width: 11px; height: 20px;
+    margin-left: -5.5px; transform-origin: 50% 100%;
+    border-radius: 50% 50% 46% 46% / 68% 68% 32% 32%;
+    background: radial-gradient(ellipse at 50% 78%,
+                #fff6dc 0%, #ffd479 32%, #ff9b28 62%, rgba(255,120,20,.15) 100%);
+    box-shadow: 0 0 18px 6px rgba(var(--candle), .34),
+                0 0 60px 22px rgba(var(--candle), .14);
+    animation: flicker 2.6s ease-in-out infinite;
+  }
+  @keyframes flicker {
+    0%, 100% { transform: scale(1) skewX(0deg);      opacity: .95 }
+    18%      { transform: scale(1.06, .94) skewX(3deg);  opacity: 1 }
+    37%      { transform: scale(.94, 1.07) skewX(-2deg); opacity: .88 }
+    58%      { transform: scale(1.03, .97) skewX(2deg);  opacity: 1 }
+    76%      { transform: scale(.97, 1.04) skewX(-3deg); opacity: .92 }
+  }
+  .candle.l  { left: 3vw;  bottom: 0; }
+  .candle.r  { right: 3vw; bottom: 0; }
+  .candle.l2 { left: 11vw; bottom: 0; }
+  .candle.r2 { right: 11vw; bottom: 0; }
+  .candle.l  .stick, .candle.r  .stick { height: 88px; }
+  .candle.l2 .stick, .candle.r2 .stick { height: 58px; }
+  .candle.l2 .flame, .candle.r2 .flame { animation-duration: 3.3s; }
+  .candle.r  .flame { animation-duration: 2.1s; }
+  @media (max-width: 700px) {
+    .candle.l2, .candle.r2 { display: none; }
+    .candle.l { left: 5px; } .candle.r { right: 5px; }
+  }
+  /* 불꽃이 흔들리는 게 거슬리는 사람도 있다 */
+  @media (prefers-reduced-motion: reduce) {
+    .candle .flame, body::before { animation: none; }
+  }
+
+  header {
+    text-align: center; padding: 52px 16px 32px;
+    background: radial-gradient(80vw 60vh at 50% -10%,
+                rgba(var(--candle), .07), transparent 70%);
+  }
+  header .deco { color: var(--frame-hi); letter-spacing: 8px; font-size: 12px;
+                 opacity: .8; }
+  h1 { margin: 12px 0 8px; font-size: 26px; letter-spacing: 3px; font-weight: 700;
+       color: #efe4cd; text-shadow: 0 0 22px rgba(var(--candle), .35); }
+  header p { margin: 0; color: var(--dim); font-size: 13px; letter-spacing: .5px; }
 
   nav {
     display: flex; justify-content: center; gap: 10px; flex-wrap: wrap;
     padding: 18px 12px; position: sticky; top: 0; z-index: 5;
-    background: rgba(26,23,20,.92); backdrop-filter: blur(6px);
-    border-bottom: 1px solid #3a332b;
+    background: rgba(11,9,8,.88); backdrop-filter: blur(7px);
+    border-bottom: 1px solid #2a231b;
   }
   nav button {
-    background: none; border: 1px solid #4a4238; color: var(--dim);
+    background: none; border: 1px solid #3b332a; color: var(--dim);
     padding: 9px 20px; border-radius: 999px; cursor: pointer; font-size: 14px;
+    transition: .15s;
   }
+  nav button:hover { color: var(--text); border-color: #5c4f3c; }
   nav button.on { color: var(--text); border-color: var(--frame-hi);
-                  background: rgba(201,168,106,.12); }
+                  background: rgba(201,168,106,.10);
+                  box-shadow: 0 0 18px rgba(var(--candle), .16); }
 
   .hall { max-width: 1080px; margin: 0 auto; padding: 26px 14px 80px; }
   .hall-title { text-align: center; margin: 26px 0 4px; font-size: 19px;
-                letter-spacing: 3px; }
+                letter-spacing: 3px;
+                text-shadow: 0 0 18px rgba(var(--candle), .28); }
   .hall-sub { text-align: center; color: var(--dim); font-size: 12px;
               margin-bottom: 26px; }
 
@@ -65,15 +135,21 @@
   .art { cursor: pointer; }
   .art .framebox {
     border: 10px solid var(--frame);
-    outline: 1px solid #5d4a28; outline-offset: -12px;
+    outline: 1px solid #4a3a1e; outline-offset: -12px;
     border-radius: 3px; background: #000;
-    box-shadow: 0 12px 28px rgba(0,0,0,.55);
+    /* 위에서 촛불이 비추는 느낌 — 아래로 짙은 그림자 */
+    box-shadow: 0 14px 34px rgba(0,0,0,.75),
+                0 0 0 1px rgba(0,0,0,.6),
+                inset 0 14px 30px rgba(0,0,0,.55);
     /* 기본 16:9. 영상 모양에 맞춰 액자마다 style 로 덮어쓴다(세로 클립) */
     aspect-ratio: 16/9; position: relative; overflow: hidden;
-    transition: transform .18s ease, box-shadow .18s ease;
+    transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
   }
-  .art:hover .framebox { transform: translateY(-4px);
-                         box-shadow: 0 18px 36px rgba(0,0,0,.65); }
+  /* 다가가면 등불을 든 것처럼 밝아진다 */
+  .art:hover .framebox { transform: translateY(-4px); border-color: #8a6d3b;
+                         box-shadow: 0 20px 42px rgba(0,0,0,.8),
+                                     0 0 34px rgba(var(--candle), .22),
+                                     inset 0 14px 30px rgba(0,0,0,.35); }
   .art video.thumb { width: 100%; height: 100%; object-fit: cover;
                      display: block; pointer-events: none; }
   .art .play {
@@ -90,8 +166,9 @@
   }
   .plate {
     margin: 12px auto 0; width: 88%; background: var(--plate);
-    border: 1px solid #4a4238; border-radius: 4px; padding: 9px 13px;
+    border: 1px solid #3b3226; border-radius: 4px; padding: 9px 13px;
     font-size: 13px; text-align: center;
+    box-shadow: inset 0 1px 0 rgba(var(--candle), .06);
   }
   /* 작품명 — 붙여 둔 전시품만. 명패의 첫 줄이 된다. */
   .plate .works { font-weight: 700; font-size: 14px; margin-bottom: 4px;
@@ -169,10 +246,18 @@
 </head>
 <body>
 
+<!-- 촛대. 장식이라 화면 낭독기에는 안 읽힌다. -->
+<div class="ambience" aria-hidden="true">
+  <span class="candle l"><i class="flame"></i><i class="wick"></i><i class="stick"></i></span>
+  <span class="candle l2"><i class="flame"></i><i class="wick"></i><i class="stick"></i></span>
+  <span class="candle r"><i class="flame"></i><i class="wick"></i><i class="stick"></i></span>
+  <span class="candle r2"><i class="flame"></i><i class="wick"></i><i class="stick"></i></span>
+</div>
+
 <header>
   <div class="deco">━━━ ✦ ━━━</div>
-  <h1>밑줄 후원 박물관</h1>
-  <p>후원의 순간들을 영구 소장합니다 · MUSEUM OF DONATIONS</p>
+  <h1>어둠의 밑줄 박물관</h1>
+  <p>촛불 아래 후원의 순간들을 영구 소장합니다 · MUSEUM OF DONATIONS</p>
 </header>
 
 <!-- 전시관 단추는 소장품을 읽고 나서 만든다(비어 있는 관은 열지 않는다) -->
