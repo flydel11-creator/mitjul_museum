@@ -464,7 +464,7 @@ const recalls = (k) => { try { return localStorage.getItem(k) === "1"; } catch (
 
 // 답 비교용: 공백·문장부호를 털어내고 본다("돈통단!", "돈 통단" 도 통과).
 const plain = (s) => (s || "").replace(/[^0-9a-z가-힣]/gi, "").toLowerCase();
-const PASS = ["돈통단", "돈통단들"];
+const PASS = ["돈통", "돈통단", "돈통단들", "돈통들"];
 const NOPE = ["소몽이", "소몽", "소몽이들", "소몽이단"];
 
 function showNotice() {
