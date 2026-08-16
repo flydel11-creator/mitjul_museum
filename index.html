@@ -191,6 +191,29 @@
   .view .plate { width: auto; min-width: 260px; max-width: 90vw; }
   .view .close { position: absolute; top: 14px; right: 18px; font-size: 30px;
                  background: none; border: 0; color: var(--text); cursor: pointer; }
+  /* ‹ › — 촛불 든 안내인처럼 양옆에 선다 */
+  .view .arrow {
+    position: absolute; top: 50%; transform: translateY(-50%);
+    width: 54px; height: 84px; font-size: 40px; line-height: 1;
+    background: rgba(11,9,8,.55); color: var(--frame-hi);
+    border: 1px solid #3b332a; border-radius: 6px; cursor: pointer;
+    transition: .15s; z-index: 2;
+  }
+  .view .arrow:hover:not(:disabled) {
+    background: rgba(201,168,106,.14); border-color: var(--frame-hi);
+    box-shadow: 0 0 26px rgba(var(--candle), .25);
+  }
+  .view .arrow:disabled { opacity: .22; cursor: default; }
+  .view .prev { left: 14px; } .view .next { right: 14px; }
+  .view .pos { margin-top: 10px; color: var(--dim); font-size: 12px;
+               letter-spacing: 2px; font-variant-numeric: tabular-nums; }
+  @media (max-width: 700px) {
+    /* 폰에서는 영상 옆에 자리가 없다 — 아래로 내리고 납작하게 */
+    .view .arrow { top: auto; bottom: 16px; transform: none;
+                   width: 62px; height: 44px; font-size: 28px; }
+    .view .prev { left: 18px; } .view .next { right: 18px; }
+    .view .pos { margin-bottom: 54px; }
+  }
 
   /* 입장 문제 — 관람 안내와 같은 액자 모양을 쓴다 */
   .gate { position: fixed; inset: 0; z-index: 70; display: flex;
@@ -267,11 +290,14 @@
 
 <div class="view" id="view">
   <button class="close" title="닫기">×</button>
+  <button class="arrow prev" title="이전 (←)">‹</button>
+  <button class="arrow next" title="다음 (→)">›</button>
   <video controls playsinline></video>
   <iframe style="display:none; width:min(96vw,980px); aspect-ratio:16/9;
                  border:10px solid var(--frame); border-radius:3px; background:#000"
           allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen></iframe>
   <div class="plate" id="view-plate"></div>
+  <div class="pos"></div>
 </div>
 
 <!-- 입장 문제. 아는 사람만 들어오라고 세워 둔 것이지 보안 장치가 아니다
@@ -417,21 +443,32 @@ function render() {
       </div>`).join("") || `<div class="empty">이 전시관은 아직 준비 중입니다.</div>`}
     </div>`;
 
-  box.querySelectorAll(".art").forEach(a => a.onclick = () => open(Number(a.dataset.i)));
+  // 관람 중 ‹ › 로 넘길 대상은 **지금 이 관에 걸린 순서** 그대로다.
+  viewList = list;
+  box.querySelectorAll(".art").forEach(a => a.onclick = () => {
+    const e = exhibits[Number(a.dataset.i)];
+    open(viewList.indexOf(e));
+  });
 }
 
 const view = document.getElementById("view");
 const vv = view.querySelector("video");
 const fr = view.querySelector("iframe");
+let viewList = [], viewAt = -1;
+
 function open(i) {
-  const e = exhibits[i];
+  if (i < 0 || i >= viewList.length) return;
+  const e = viewList[i];
   // 밖에 올라간 소장품은 임베드로 관람한다(영상 트래픽이 그쪽으로 간다).
   // 유튜브와 치지직 클립을 병행한다 — 둘 다 있으면 유튜브(내 계정)가 이긴다.
   // 로컬 파일로 재생하는 길은 두지 않는다 — 걸린 것만 관람한다(사용자 요청).
+  //
+  // 유튜브는 `enablejsapi=1` 이 있어야 재생이 끝난 걸 알려준다(아래 handshake).
   const embed = e.youtube
-    ? `https://www.youtube-nocookie.com/embed/${e.youtube}?autoplay=1&rel=0`
+    ? `https://www.youtube-nocookie.com/embed/${e.youtube}?autoplay=1&rel=0&enablejsapi=1`
     : e.chzzk ? `https://chzzk.naver.com/embed/clip/${e.chzzk}?autoplay=1` : null;
   if (!embed) return;
+  viewAt = i;
   vv.style.display = "none";
   fr.style.display = "";
   // 관람 창도 영상 모양을 따른다. 세로 영상은 높이가 화면을 넘지 않게 잡는다.
@@ -443,15 +480,72 @@ function open(i) {
   fr.src = embed;
   document.getElementById("view-plate").innerHTML = plateHTML(e);
   view.classList.add("on");
+  updateArrows();
 }
+
+function updateArrows() {
+  view.querySelector(".prev").disabled = viewAt <= 0;
+  view.querySelector(".next").disabled = viewAt >= viewList.length - 1;
+  view.querySelector(".pos").textContent =
+    viewList.length ? `${viewAt + 1} / ${viewList.length}` : "";
+}
+
+// 다음/이전. 마지막에서 다음을 부르면 그냥 멈춘다(처음으로 돌지 않는다).
+function step(delta) {
+  const next = viewAt + delta;
+  if (next < 0 || next >= viewList.length) return;
+  open(next);
+}
+
 function close() {
   view.classList.remove("on");
   vv.pause(); vv.removeAttribute("src");
   fr.removeAttribute("src");
+  viewAt = -1;
 }
+
+// 재생이 끝나면 알아서 다음 소장품으로 — 유튜브와 치지직이 각각 다른 말로
+// 끝을 알려준다(실측).
+//
+// ★ 보낸 창(ev.source)이 우리 iframe 인지로 거르면 안 된다. 치지직 임베드는
+//   안에 iframe 을 하나 더 두고("registerInnerIFrame") 거기서 말을 걸어서,
+//   fr.contentWindow 와 안 맞는다. 대신 **출처(origin)** 와 관람창이 열려
+//   있는지로 거른다 — 어차피 창을 닫을 때 src 를 비우므로 남는 게 없다.
+const PLAYER_ORIGINS = ["youtube.com", "youtube-nocookie.com", "chzzk.naver.com"];
+window.addEventListener("message", (ev) => {
+  if (!view.classList.contains("on")) return;
+  if (!PLAYER_ORIGINS.some(o => String(ev.origin).includes(o))) return;
+  let data = ev.data;
+  if (typeof data === "string") {
+    try { data = JSON.parse(data); } catch (_) { return; }
+  }
+  if (!data || typeof data !== "object") return;
+  const ended =
+    data.eventType === "ended" ||                     // 치지직
+    (data.event === "onStateChange" && data.info === 0) ||   // 유튜브
+    (data.event === "infoDelivery" && data.info && data.info.playerState === 0);
+  if (ended) step(1);
+});
+
+// 유튜브는 먼저 말을 걸어야 상태를 보내 준다.
+fr.addEventListener("load", () => {
+  if (!fr.src.includes("youtube")) return;
+  const say = (o) => fr.contentWindow &&
+    fr.contentWindow.postMessage(JSON.stringify({ ...o, id: 1, channel: "widget" }), "*");
+  say({ event: "listening" });
+  say({ event: "command", func: "addEventListener", args: ["onStateChange"] });
+});
+
 view.querySelector(".close").onclick = close;
+view.querySelector(".prev").onclick = () => step(-1);
+view.querySelector(".next").onclick = () => step(1);
 view.onclick = ev => { if (ev.target === view) close(); };
-document.addEventListener("keydown", ev => { if (ev.key === "Escape") close(); });
+document.addEventListener("keydown", ev => {
+  if (!view.classList.contains("on")) return;
+  if (ev.key === "Escape") close();
+  else if (ev.key === "ArrowLeft") step(-1);
+  else if (ev.key === "ArrowRight") step(1);
+});
 
 // ── 입장 문제 → 관람 안내 순서로 보여준다 ────────────────────────────
 // (문구를 크게 고쳤으면 열쇠 끝 숫자를 올려 다시 보이게 할 수 있다)
